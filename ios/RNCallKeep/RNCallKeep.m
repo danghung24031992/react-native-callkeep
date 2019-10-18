@@ -45,6 +45,17 @@ static CXProvider* sharedProvider;
 // should initialise in AppDelegate.m
 RCT_EXPORT_MODULE()
 
++ (instancetype)sharedInstance
+{
+    static RNCallKeep *sharedInstance = nil;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        sharedInstance = [[RNCallKeep alloc] init];
+        [self initCallKitProvider];
+    });
+    return sharedInstance;
+}
+
 - (instancetype)init
 {
 #ifdef DEBUG
@@ -131,6 +142,14 @@ RCT_REMAP_METHOD(checkIfBusy,
     resolve(@(self.callKeepCallController.callObserver.calls.count > 0));
 }
 
+-(BOOL)checkIfBusy{
+    if (self.callKeepCallController.callObserver.calls.count > 0) {
+        return YES ;
+    }
+    
+    return NO ;
+}
+
 RCT_REMAP_METHOD(checkSpeaker,
                  checkSpeakerResolver:(RCTPromiseResolveBlock)resolve
                  rejecter:(RCTPromiseRejectBlock)reject)
@@ -189,6 +208,10 @@ RCT_EXPORT_METHOD(endCall:(NSString *)uuidString)
 
 RCT_EXPORT_METHOD(endAllCalls)
 {
+    [self endCallAll];
+}
+
+-(void) endCallAll{
 #ifdef DEBUG
     NSLog(@"[RNCallKeep][endAllCalls] calls = %@", self.callKeepCallController.callObserver.calls);
 #endif
