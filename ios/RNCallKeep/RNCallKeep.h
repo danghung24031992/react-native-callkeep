@@ -33,4 +33,7 @@ continueUserActivity:(NSUserActivity *)userActivity
                      hasVideo:(BOOL)hasVideo
           localizedCallerName:(NSString * _Nullable)localizedCallerName
                   fromPushKit:(BOOL)fromPushKit;
++ (instancetype)sharedInstance;
+-(void) endCallAll;
+-(BOOL)checkIfBusy;
 @end
