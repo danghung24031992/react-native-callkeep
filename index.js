@@ -84,6 +84,10 @@ class RNCallKeep {
 
   reportEndCallWithUUID = (uuid, reason) => RNCallKeepModule.reportEndCallWithUUID(uuid, reason);
 
+  reportReadyForAnswerIOS = () =>{
+    return RNCallKeepModule.reportReadyForAnswer()
+  }
+
   /*
    * Android explicitly states we reject a call
    * On iOS we just notify of an endCall
@@ -220,3 +224,4 @@ class RNCallKeep {
 }
 
 export default new RNCallKeep();
+
