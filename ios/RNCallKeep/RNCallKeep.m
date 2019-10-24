@@ -38,6 +38,7 @@ static NSString *const RNCallKeepCheckReachability = @"RNCallKeepCheckReachabili
 {
     NSOperatingSystemVersion _version;
     BOOL _isStartCallActionEventListenerAdded;
+    BOOL _isReadyForVideo;
 }
 
 static CXProvider* sharedProvider;
@@ -82,7 +83,7 @@ RCT_EXPORT_MODULE()
     NSLog(@"[RNCallKeep][dealloc]");
 #endif
     [[NSNotificationCenter defaultCenter] removeObserver:self];
-
+    
     if (self.callKeepProvider != nil) {
         [self.callKeepProvider invalidate];
     }
@@ -93,18 +94,18 @@ RCT_EXPORT_MODULE()
 - (NSArray<NSString *> *)supportedEvents
 {
     return @[
-        RNCallKeepDidReceiveStartCallAction,
-        RNCallKeepPerformAnswerCallAction,
-        RNCallKeepPerformEndCallAction,
-        RNCallKeepDidActivateAudioSession,
-        RNCallKeepDidDeactivateAudioSession,
-        RNCallKeepDidDisplayIncomingCall,
-        RNCallKeepDidPerformSetMutedCallAction,
-        RNCallKeepPerformPlayDTMFCallAction,
-        RNCallKeepDidToggleHoldAction,
-        RNCallKeepProviderReset,
-        RNCallKeepCheckReachability
-    ];
+             RNCallKeepDidReceiveStartCallAction,
+             RNCallKeepPerformAnswerCallAction,
+             RNCallKeepPerformEndCallAction,
+             RNCallKeepDidActivateAudioSession,
+             RNCallKeepDidDeactivateAudioSession,
+             RNCallKeepDidDisplayIncomingCall,
+             RNCallKeepDidPerformSetMutedCallAction,
+             RNCallKeepPerformPlayDTMFCallAction,
+             RNCallKeepDidToggleHoldAction,
+             RNCallKeepProviderReset,
+             RNCallKeepCheckReachability
+             ];
 }
 
 + (void)initCallKitProvider {
@@ -125,9 +126,9 @@ RCT_EXPORT_METHOD(setup:(NSDictionary *)options)
     // Store settings in NSUserDefault
     [[NSUserDefaults standardUserDefaults] setObject:settings forKey:@"RNCallKeepSettings"];
     [[NSUserDefaults standardUserDefaults] synchronize];
-
+    
     [RNCallKeep initCallKitProvider];
-
+    
     self.callKeepProvider = sharedProvider;
     [self.callKeepProvider setDelegate:self queue:nil];
 }
@@ -165,19 +166,19 @@ RCT_REMAP_METHOD(checkSpeaker,
 
 // Display the incoming call to the user
 RCT_EXPORT_METHOD(displayIncomingCall:(NSString *)uuidString
-                               handle:(NSString *)handle
-                           handleType:(NSString *)handleType
-                             hasVideo:(BOOL)hasVideo
+                  handle:(NSString *)handle
+                  handleType:(NSString *)handleType
+                  hasVideo:(BOOL)hasVideo
                   localizedCallerName:(NSString * _Nullable)localizedCallerName)
 {
     [RNCallKeep reportNewIncomingCall: uuidString handle:handle handleType:handleType hasVideo:hasVideo localizedCallerName:localizedCallerName fromPushKit: NO];
 }
 
 RCT_EXPORT_METHOD(startCall:(NSString *)uuidString
-                     handle:(NSString *)handle
-          contactIdentifier:(NSString * _Nullable)contactIdentifier
-                 handleType:(NSString *)handleType
-                      video:(BOOL)video)
+                  handle:(NSString *)handle
+                  contactIdentifier:(NSString * _Nullable)contactIdentifier
+                  handleType:(NSString *)handleType
+                  video:(BOOL)video)
 {
 #ifdef DEBUG
     NSLog(@"[RNCallKeep][startCall] uuidString = %@", uuidString);
@@ -188,9 +189,9 @@ RCT_EXPORT_METHOD(startCall:(NSString *)uuidString
     CXStartCallAction *startCallAction = [[CXStartCallAction alloc] initWithCallUUID:uuid handle:callHandle];
     [startCallAction setVideo:video];
     [startCallAction setContactIdentifier:contactIdentifier];
-
+    
     CXTransaction *transaction = [[CXTransaction alloc] initWithAction:startCallAction];
-
+    
     [self requestTransaction:transaction];
 }
 
@@ -202,7 +203,7 @@ RCT_EXPORT_METHOD(endCall:(NSString *)uuidString)
     NSUUID *uuid = [[NSUUID alloc] initWithUUIDString:uuidString];
     CXEndCallAction *endCallAction = [[CXEndCallAction alloc] initWithCallUUID:uuid];
     CXTransaction *transaction = [[CXTransaction alloc] initWithAction:endCallAction];
-
+    
     [self requestTransaction:transaction];
 }
 
@@ -231,7 +232,7 @@ RCT_EXPORT_METHOD(setOnHold:(NSString *)uuidString :(BOOL)shouldHold)
     CXSetHeldCallAction *setHeldCallAction = [[CXSetHeldCallAction alloc] initWithCallUUID:uuid onHold:shouldHold];
     CXTransaction *transaction = [[CXTransaction alloc] init];
     [transaction addAction:setHeldCallAction];
-
+    
     [self requestTransaction:transaction];
 }
 
@@ -257,6 +258,7 @@ RCT_EXPORT_METHOD(reportEndCallWithUUID:(NSString *)uuidString :(int)reason)
 #ifdef DEBUG
     NSLog(@"[RNCallKeep][reportEndCallWithUUID] uuidString = %@ reason = %d", uuidString, reason);
 #endif
+    _isReadyForVideo = NO;
     NSUUID *uuid = [[NSUUID alloc] initWithUUIDString:uuidString];
     switch (reason) {
         case CXCallEndedReasonFailed:
@@ -270,6 +272,16 @@ RCT_EXPORT_METHOD(reportEndCallWithUUID:(NSString *)uuidString :(int)reason)
             break;
         default:
             break;
+    }
+}
+
+RCT_EXPORT_METHOD(reportReadyForAnswer)
+{
+    if(_isReadyForVideo){
+        [self sendEventWithName:RNCallKeepDidActivateAudioSession body:nil];
+        _isReadyForVideo = NO;
+    }else{
+        _isReadyForVideo = TRUE;
     }
 }
 
@@ -295,7 +307,7 @@ RCT_EXPORT_METHOD(setMutedCall:(NSString *)uuidString :(BOOL)muted)
     CXSetMutedCallAction *setMutedAction = [[CXSetMutedCallAction alloc] initWithCallUUID:uuid muted:muted];
     CXTransaction *transaction = [[CXTransaction alloc] init];
     [transaction addAction:setMutedAction];
-
+    
     [self requestTransaction:transaction];
 }
 
@@ -308,7 +320,7 @@ RCT_EXPORT_METHOD(sendDTMF:(NSString *)uuidString dtmf:(NSString *)key)
     CXPlayDTMFCallAction *dtmfAction = [[CXPlayDTMFCallAction alloc] initWithCallUUID:uuid digits:key type:CXPlayDTMFCallActionTypeHardPause];
     CXTransaction *transaction = [[CXTransaction alloc] init];
     [transaction addAction:dtmfAction];
-
+    
     [self requestTransaction:transaction];
 }
 
@@ -325,7 +337,7 @@ RCT_EXPORT_METHOD(sendDTMF:(NSString *)uuidString dtmf:(NSString *)key)
             NSLog(@"[RNCallKeep][requestTransaction] Error requesting transaction (%@): (%@)", transaction.actions, error);
         } else {
             NSLog(@"[RNCallKeep][requestTransaction] Requested transaction successfully");
-
+            
             // CXStartCallAction
             if ([[transaction.actions firstObject] isKindOfClass:[CXStartCallAction class]]) {
                 CXStartCallAction *startCallAction = [transaction.actions firstObject];
@@ -363,7 +375,7 @@ RCT_EXPORT_METHOD(sendDTMF:(NSString *)uuidString dtmf:(NSString *)key)
     callUpdate.supportsUngrouping = YES;
     callUpdate.hasVideo = hasVideo;
     callUpdate.localizedCallerName = localizedCallerName;
-
+    
     [RNCallKeep initCallKitProvider];
     [sharedProvider reportNewIncomingCallWithUUID:uuid update:callUpdate completion:^(NSError * _Nullable error) {
         RNCallKeep *callKeep = [RNCallKeep allocWithZone: nil];
@@ -436,15 +448,15 @@ RCT_EXPORT_METHOD(sendDTMF:(NSString *)uuidString dtmf:(NSString *)key)
 #ifdef DEBUG
     NSLog(@"[RNCallKeep][configureAudioSession] Activating audio session");
 #endif
-
+    
     AVAudioSession* audioSession = [AVAudioSession sharedInstance];
     [audioSession setCategory:AVAudioSessionCategoryPlayAndRecord withOptions:AVAudioSessionCategoryOptionAllowBluetooth error:nil];
-
+    
     [audioSession setMode:AVAudioSessionModeVoiceChat error:nil];
-
+    
     double sampleRate = 44100.0;
     [audioSession setPreferredSampleRate:sampleRate error:nil];
-
+    
     NSTimeInterval bufferDuration = .005;
     [audioSession setPreferredIOBufferDuration:bufferDuration error:nil];
     [audioSession setActive:TRUE error:nil];
@@ -458,19 +470,19 @@ RCT_EXPORT_METHOD(sendDTMF:(NSString *)uuidString dtmf:(NSString *)key)
     NSLog(@"[RNCallKeep][application:openURL]");
 #endif
     /*
-    NSString *handle = [url startCallHandle];
-    if (handle != nil && handle.length > 0 ){
-        NSDictionary *userInfo = @{
-            @"handle": handle,
-            @"video": @NO
-        };
-        [[NSNotificationCenter defaultCenter] postNotificationName:RNCallKeepHandleStartCallNotification
-                                                            object:self
-                                                          userInfo:userInfo];
-        return YES;
-    }
-    return NO;
-    */
+     NSString *handle = [url startCallHandle];
+     if (handle != nil && handle.length > 0 ){
+     NSDictionary *userInfo = @{
+     @"handle": handle,
+     @"video": @NO
+     };
+     [[NSNotificationCenter defaultCenter] postNotificationName:RNCallKeepHandleStartCallNotification
+     object:self
+     userInfo:userInfo];
+     return YES;
+     }
+     return NO;
+     */
     return YES;
 }
 
@@ -486,9 +498,9 @@ continueUserActivity:(NSUserActivity *)userActivity
     NSString *handle;
     BOOL isAudioCall;
     BOOL isVideoCall;
-
-//HACK TO AVOID XCODE 10 COMPILE CRASH
-//REMOVE ON NEXT MAJOR RELEASE OF RNCALLKIT
+    
+    //HACK TO AVOID XCODE 10 COMPILE CRASH
+    //REMOVE ON NEXT MAJOR RELEASE OF RNCALLKIT
 #if __IPHONE_OS_VERSION_MAX_ALLOWED >= 130000
     //XCode 11
     // iOS 13 returns an INStartCallIntent userActivity type
@@ -501,12 +513,12 @@ continueUserActivity:(NSUserActivity *)userActivity
         //XCode 10 and below
         isAudioCall = [userActivity.activityType isEqualToString:INStartAudioCallIntentIdentifier];
         isVideoCall = [userActivity.activityType isEqualToString:INStartVideoCallIntentIdentifier];
-//HACK TO AVOID XCODE 10 COMPILE CRASH
-//REMOVE ON NEXT MAJOR RELEASE OF RNCALLKIT
+        //HACK TO AVOID XCODE 10 COMPILE CRASH
+        //REMOVE ON NEXT MAJOR RELEASE OF RNCALLKIT
 #if __IPHONE_OS_VERSION_MAX_ALLOWED >= 130000
     }
 #endif
-
+    
     if (isAudioCall) {
         INStartAudioCallIntent *startAudioCallIntent = (INStartAudioCallIntent *)interaction.intent;
         contact = [startAudioCallIntent.contacts firstObject];
@@ -514,17 +526,17 @@ continueUserActivity:(NSUserActivity *)userActivity
         INStartVideoCallIntent *startVideoCallIntent = (INStartVideoCallIntent *)interaction.intent;
         contact = [startVideoCallIntent.contacts firstObject];
     }
-
+    
     if (contact != nil) {
         handle = contact.personHandle.value;
     }
-
+    
     if (handle != nil && handle.length > 0 ){
         NSDictionary *userInfo = @{
-            @"handle": handle,
-            @"video": @(isVideoCall)
-        };
-
+                                   @"handle": handle,
+                                   @"video": @(isVideoCall)
+                                   };
+        
         RNCallKeep *callKeep = [RNCallKeep allocWithZone: nil];
         [callKeep handleStartCallNotification: userInfo];
         return YES;
@@ -589,7 +601,7 @@ RCT_EXPORT_METHOD(reportUpdatedCall:(NSString *)uuidString contactIdentifier:(NS
     NSUUID *uuid = [[NSUUID alloc] initWithUUIDString:uuidString];
     CXCallUpdate *callUpdate = [[CXCallUpdate alloc] init];
     callUpdate.localizedCallerName = contactIdentifier;
-
+    
     [self.callKeepProvider reportCallWithUUID:uuid updated:callUpdate];
 }
 
@@ -610,6 +622,7 @@ RCT_EXPORT_METHOD(reportUpdatedCall:(NSString *)uuidString contactIdentifier:(NS
 #ifdef DEBUG
     NSLog(@"[RNCallKeep][CXProviderDelegate][provider:performEndCallAction]");
 #endif
+    _isReadyForVideo = NO;
     [self sendEventWithName:RNCallKeepPerformEndCallAction body:@{ @"callUUID": [action.callUUID.UUIDString lowercaseString] }];
     [action fulfill];
 }
@@ -619,7 +632,7 @@ RCT_EXPORT_METHOD(reportUpdatedCall:(NSString *)uuidString contactIdentifier:(NS
 #ifdef DEBUG
     NSLog(@"[RNCallKeep][CXProviderDelegate][provider:performSetHeldCallAction]");
 #endif
-
+    
     [self sendEventWithName:RNCallKeepDidToggleHoldAction body:@{ @"hold": @(action.onHold), @"callUUID": [action.callUUID.UUIDString lowercaseString] }];
     [action fulfill];
 }
@@ -637,7 +650,7 @@ RCT_EXPORT_METHOD(reportUpdatedCall:(NSString *)uuidString contactIdentifier:(NS
 #ifdef DEBUG
     NSLog(@"[RNCallKeep][CXProviderDelegate][provider:performSetMutedCallAction]");
 #endif
-
+    
     [self sendEventWithName:RNCallKeepDidPerformSetMutedCallAction body:@{ @"muted": @(action.muted), @"callUUID": [action.callUUID.UUIDString lowercaseString] }];
     [action fulfill];
 }
@@ -658,10 +671,19 @@ RCT_EXPORT_METHOD(reportUpdatedCall:(NSString *)uuidString contactIdentifier:(NS
     = @{
         AVAudioSessionInterruptionTypeKey: [NSNumber numberWithInt:AVAudioSessionInterruptionTypeEnded],
         AVAudioSessionInterruptionOptionKey: [NSNumber numberWithInt:AVAudioSessionInterruptionOptionShouldResume]
-    };
+        };
     [[NSNotificationCenter defaultCenter] postNotificationName:AVAudioSessionInterruptionNotification object:nil userInfo:userInfo];
-
+    
     [self configureAudioSession];
+    if(_isReadyForVideo){
+        [self sendEventWithName:RNCallKeepDidActivateAudioSession body:nil];
+        _isReadyForVideo = NO;
+    }else{
+        _isReadyForVideo = TRUE;
+    }
+}
+
+-(void)emitActiveAudioSession{
     [self sendEventWithName:RNCallKeepDidActivateAudioSession body:nil];
 }
 
